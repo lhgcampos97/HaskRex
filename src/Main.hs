@@ -51,6 +51,7 @@ handleInput _ game = game
 
 update :: Float -> GameState -> GameState
 update dt game
+  | checkCollision game = game -- Handle collision here (e.g., end the game)
   | isJumping game && jumpTime game < 0.5 = updatedGame {barY = barY updatedGame + 200 * dt, jumpTime = jumpTime game + dt}
   | isJumping game && jumpTime game >= 0.5 && barY updatedGame > floorY + 25 = updatedGame {barY = barY updatedGame - 200 * dt, jumpTime = jumpTime game + dt}
   | isJumping game && barY updatedGame <= floorY + 25 = updatedGame {barY = floorY + 25, isJumping = False, jumpTime = 0}
@@ -66,7 +67,7 @@ jump game = game {isJumping = True, jumpTime = 0}
 generateObstacles :: RandomGen g => g -> [Obstacle]
 generateObstacles gen = obstacles
   where
-    (numObstacles, gen') = randomR (5, 10) gen
+    (numObstacles, gen') = randomR (5, 1000) gen
     obstacles = take numObstacles $ zipWith generateObstacle [1..] $ randoms gen'
 
 generateObstacle :: Int -> Float -> Obstacle
@@ -82,6 +83,17 @@ updateObstacles dt game = updatedGame { obstacles = map updateObstacle (obstacle
   where
     updatedGame = game { obstacles = filter (\o -> obstacleX o > -400) (obstacles game) }
     updateObstacle obstacle = obstacle { obstacleX = obstacleX obstacle - 300 * dt }
+
+checkCollision :: GameState -> Bool
+checkCollision game =
+  any (\obstacle -> collidesWith (barX game) (barY game) (obstacleX obstacle) (obstacleY obstacle) (obstacleWidth obstacle) (obstacleHeight obstacle)) (obstacles game)
+
+collidesWith :: Float -> Float -> Float -> Float -> Float -> Float -> Bool
+collidesWith x1 y1 x2 y2 width height =
+  let xOverlap = abs (x1 - x2) * 2 <= (50 + width)
+      yOverlap = abs (y1 - y2) * 2 <= (50 + height)
+  in xOverlap && yOverlap
+
 
 main :: IO ()
 main = do
