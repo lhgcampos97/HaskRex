@@ -46,7 +46,9 @@ handleInput (EventKey (SpecialKey KeyRight) Down _ _) game = game {movingRight =
 handleInput (EventKey (SpecialKey KeyRight) Up _ _) game = game {movingRight = False}
 handleInput (EventKey (SpecialKey KeyLeft) Down _ _) game = game {movingLeft = True}
 handleInput (EventKey (SpecialKey KeyLeft) Up _ _) game = game {movingLeft = False}
-handleInput (EventKey (SpecialKey KeyUp) Down _ _) game = jump game
+handleInput (EventKey (SpecialKey KeyUp) Down _ _) game
+  | not (isJumping game) = jump game  -- Only allow jumping if not already jumping
+  | otherwise = game
 handleInput _ game = game
 
 update :: Float -> GameState -> GameState
@@ -74,8 +76,8 @@ generateObstacle :: Int -> Float -> Obstacle
 generateObstacle index rand = Obstacle
   { obstacleX = 800 + fromIntegral index * 300,
     obstacleY = floorY + 25,
-    obstacleWidth = 50,
-    obstacleHeight = 100 + rand * 150
+    obstacleWidth = 20,
+    obstacleHeight = 5 + rand * 10
   }
 
 updateObstacles :: Float -> GameState -> GameState
