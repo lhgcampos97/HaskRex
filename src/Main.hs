@@ -19,8 +19,18 @@ data Obstacle = Obstacle
     obstacleHeight :: Float
   }
 
-initialState :: GameState
-initialState = GameState {barX = 0, barY = floorY + 25, isJumping = False, jumpTime = 0, movingLeft = False, movingRight = False, obstacles = []}
+data GameScreen = InitialScreen | RunningScreen
+
+data GameData = GameData
+  { gameState :: GameState,
+    currentScreen :: GameScreen
+  }
+
+initialState :: GameData
+initialState = GameData {gameState = initialGameState, currentScreen = InitialScreen}
+
+initialGameState :: GameState
+initialGameState = GameState {barX = 0, barY = floorY + 25, isJumping = False, jumpTime = 0, movingLeft = False, movingRight = False, obstacles = []}
 
 window :: Display
 window = InWindow "Jumping Bar" (800, 600) (100, 100)
@@ -31,35 +41,51 @@ background = white
 floorY :: Float
 floorY = -250
 
-render :: GameState -> Picture
-render game = pictures [ barPic, floorPic, obstaclesPic ]
+render :: GameData -> Picture
+render gameData =
+  case currentScreen gameData of
+    InitialScreen ->
+      pictures
+        [ translate (-175) 0 $ scale 0.3 0.3 $ color black $ text "Press Enter to Start"
+        ]
+    RunningScreen ->
+      pictures
+        [ barPic,
+          floorPic,
+          obstaclesPic
+        ]
   where
-    barPic = translate (barX game) (barY game) $ color black $ rectangleSolid 50 50
+    currentGameState = gameState gameData
+    barPic = translate (barX currentGameState) (barY currentGameState) $ color black $ rectangleSolid 50 50
     floorPic = translate 0 floorY $ color black $ rectangleSolid 800 20
-    obstaclesPic = pictures $ map renderObstacle (obstacles game)
+    obstaclesPic = pictures $ map renderObstacle (obstacles currentGameState)
+
+
+
 
 renderObstacle :: Obstacle -> Picture
 renderObstacle obstacle = translate (obstacleX obstacle) (obstacleY obstacle) $ color red $ rectangleSolid (obstacleWidth obstacle) (obstacleHeight obstacle)
 
-handleInput :: Event -> GameState -> GameState
-handleInput (EventKey (SpecialKey KeyRight) Down _ _) game = game {movingRight = True}
-handleInput (EventKey (SpecialKey KeyRight) Up _ _) game = game {movingRight = False}
-handleInput (EventKey (SpecialKey KeyLeft) Down _ _) game = game {movingLeft = True}
-handleInput (EventKey (SpecialKey KeyLeft) Up _ _) game = game {movingLeft = False}
-handleInput (EventKey (SpecialKey KeyUp) Down _ _) game
-  | not (isJumping game) = jump game  -- Only allow jumping if not already jumping
-  | otherwise = game
-handleInput _ game = game
+handleInput :: Event -> GameData -> GameData
+handleInput (EventKey (SpecialKey KeyRight) Down _ _) gameData@GameData{gameState = game} = gameData {gameState = game {movingRight = True}}
+handleInput (EventKey (SpecialKey KeyRight) Up _ _) gameData@GameData{gameState = game} = gameData {gameState = game {movingRight = False}}
+handleInput (EventKey (SpecialKey KeyLeft) Down _ _) gameData@GameData{gameState = game} = gameData {gameState = game {movingLeft = True}}
+handleInput (EventKey (SpecialKey KeyLeft) Up _ _) gameData@GameData{gameState = game} = gameData {gameState = game {movingLeft = False}}
+handleInput (EventKey (SpecialKey KeyUp) Down _ _) gameData@GameData{gameState = game}
+  | not (isJumping game) = gameData {gameState = jump game}
+  | otherwise = gameData
+handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = InitialScreen} = gameData {currentScreen = RunningScreen}  -- Transition to RunningScreen
+handleInput _ gameData = gameData
 
-update :: Float -> GameState -> GameState
-update dt game
-  | checkCollision game = game -- Handle collision here (e.g., end the game)
-  | isJumping game && jumpTime game < 0.5 = updatedGame {barY = barY updatedGame + 200 * dt, jumpTime = jumpTime game + dt}
-  | isJumping game && jumpTime game >= 0.5 && barY updatedGame > floorY + 25 = updatedGame {barY = barY updatedGame - 200 * dt, jumpTime = jumpTime game + dt}
-  | isJumping game && barY updatedGame <= floorY + 25 = updatedGame {barY = floorY + 25, isJumping = False, jumpTime = 0}
-  | movingRight game = updatedGame {barX = barX game + 300 * dt}
-  | movingLeft game = updatedGame {barX = barX game - 300 * dt}
-  | otherwise = updatedGame {jumpTime = 0}
+update :: Float -> GameData -> GameData
+update dt gameData@GameData{gameState = game}
+  | checkCollision game = gameData  -- Handle collision here (e.g., end the game)
+  | isJumping game && jumpTime game < 0.5 = gameData {gameState = updatedGame {barY = barY updatedGame + 200 * dt, jumpTime = jumpTime game + dt}}
+  | isJumping game && jumpTime game >= 0.5 && barY updatedGame > floorY + 25 = gameData {gameState = updatedGame {barY = barY updatedGame - 200 * dt, jumpTime = jumpTime game + dt}}
+  | isJumping game && barY updatedGame <= floorY + 25 = gameData {gameState = updatedGame {barY = floorY + 25, isJumping = False, jumpTime = 0}}
+  | movingRight game = gameData {gameState = updatedGame {barX = barX game + 300 * dt}}
+  | movingLeft game = gameData {gameState = updatedGame {barX = barX game - 300 * dt}}
+  | otherwise = gameData {gameState = updatedGame {jumpTime = 0}}
   where
     updatedGame = updateObstacles dt game
 
@@ -100,5 +126,6 @@ collidesWith x1 y1 x2 y2 width height =
 main :: IO ()
 main = do
   gen <- newStdGen
-  let initialStateWithObstacles = initialState {obstacles = generateObstacles gen}
-  play window background 60 initialStateWithObstacles render handleInput update
+  let initialStateWithObstacles = initialGameState {obstacles = generateObstacles gen}
+      initialGameData = initialState {gameState = initialStateWithObstacles, currentScreen = InitialScreen}
+  play window background 60 initialGameData render handleInput update
