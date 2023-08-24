@@ -19,7 +19,7 @@ data Obstacle = Obstacle
     obstacleHeight :: Float
   }
 
-data GameScreen = InitialScreen | RunningScreen
+data GameScreen = InitialScreen | RunningScreen | GameOverScreen
 
 data GameData = GameData
   { gameState :: GameState,
@@ -54,13 +54,15 @@ render gameData =
           floorPic,
           obstaclesPic
         ]
+    GameOverScreen ->
+      pictures
+        [ translate (-175) 0 $ scale 0.3 0.3 $ color black $ text "Game Over. Press Enter to Restart"
+        ]
   where
     currentGameState = gameState gameData
     barPic = translate (barX currentGameState) (barY currentGameState) $ color black $ rectangleSolid 50 50
     floorPic = translate 0 floorY $ color black $ rectangleSolid 800 20
     obstaclesPic = pictures $ map renderObstacle (obstacles currentGameState)
-
-
 
 
 renderObstacle :: Obstacle -> Picture
@@ -75,11 +77,12 @@ handleInput (EventKey (SpecialKey KeyUp) Down _ _) gameData@GameData{gameState =
   | not (isJumping game) = gameData {gameState = jump game}
   | otherwise = gameData
 handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = InitialScreen} = gameData {currentScreen = RunningScreen}  -- Transition to RunningScreen
+handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = GameOverScreen} = initialState  -- Reset the game when Enter is pressed in GameOverScreen
 handleInput _ gameData = gameData
 
 update :: Float -> GameData -> GameData
 update dt gameData@GameData{gameState = game}
-  | checkCollision game = gameData  -- Handle collision here (e.g., end the game)
+  | checkCollision game = gameData {currentScreen = GameOverScreen}  -- Transition to GameOverScreen on collision
   | isJumping game && jumpTime game < 0.5 = gameData {gameState = updatedGame {barY = barY updatedGame + 200 * dt, jumpTime = jumpTime game + dt}}
   | isJumping game && jumpTime game >= 0.5 && barY updatedGame > floorY + 25 = gameData {gameState = updatedGame {barY = barY updatedGame - 200 * dt, jumpTime = jumpTime game + dt}}
   | isJumping game && barY updatedGame <= floorY + 25 = gameData {gameState = updatedGame {barY = floorY + 25, isJumping = False, jumpTime = 0}}
