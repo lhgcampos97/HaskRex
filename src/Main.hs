@@ -77,7 +77,10 @@ handleInput (EventKey (SpecialKey KeyUp) Down _ _) gameData@GameData{gameState =
   | not (isJumping game) = gameData {gameState = jump game}
   | otherwise = gameData
 handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = InitialScreen} = gameData {currentScreen = RunningScreen}  -- Transition to RunningScreen
-handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = GameOverScreen} = initialState  -- Reset the game when Enter is pressed in GameOverScreen
+handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = GameOverScreen} =
+  let gen = mkStdGen 0  -- Use a new random seed to generate new obstacles
+      newStateWithObstacles = generateInitialObstacles gen
+  in GameData {gameState = newStateWithObstacles, currentScreen = RunningScreen}
 handleInput _ gameData = gameData
 
 update :: Float -> GameData -> GameData
@@ -125,10 +128,13 @@ collidesWith x1 y1 x2 y2 width height =
       yOverlap = abs (y1 - y2) * 2 <= (50 + height)
   in xOverlap && yOverlap
 
+generateInitialObstacles :: RandomGen g => g -> GameState
+generateInitialObstacles gen = initialGameState {obstacles = generateObstacles gen}
+
 
 main :: IO ()
 main = do
   gen <- newStdGen
-  let initialStateWithObstacles = initialGameState {obstacles = generateObstacles gen}
+  let initialStateWithObstacles = generateInitialObstacles gen
       initialGameData = initialState {gameState = initialStateWithObstacles, currentScreen = InitialScreen}
   play window background 60 initialGameData render handleInput update
