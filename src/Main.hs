@@ -56,7 +56,8 @@ render gameData =
         ]
     GameOverScreen ->
       pictures
-        [ translate (-175) 0 $ scale 0.3 0.3 $ color black $ text "Game Over. Press Enter to Restart"
+        [ translate (-175) 50 $ scale 0.3 0.3 $ color black $ text "Game Over",
+          translate (-250) (-50) $ scale 0.3 0.3 $ color black $ text "Press Enter to Restart"
         ]
   where
     currentGameState = gameState gameData
@@ -98,15 +99,27 @@ update dt gameData@GameData{gameState = game}
 jump :: GameState -> GameState
 jump game = game {isJumping = True, jumpTime = 0}
 
+-- Define base obstacle space as a constant
+baseObstacleSpace :: Float
+baseObstacleSpace = 400
+
+-- Modify the generateObstacles function
 generateObstacles :: RandomGen g => g -> [Obstacle]
 generateObstacles gen = obstacles
   where
     (numObstacles, gen') = randomR (5, 1000) gen
-    obstacles = take numObstacles $ zipWith generateObstacle [1..] $ randoms gen'
+    obstacleWidth = 20
+    obstacleXPositions = scanl (+) (800 + obstacleWidth) (take numObstacles (randomDistances gen'))
+    obstacles = zipWith generateObstacle obstacleXPositions $ randoms gen'
 
-generateObstacle :: Int -> Float -> Obstacle
-generateObstacle index rand = Obstacle
-  { obstacleX = 800 + fromIntegral index * 300,
+randomDistances :: RandomGen g => g -> [Float]
+randomDistances gen = distances
+  where
+    distances = map (\x -> baseObstacleSpace + x * 200) (randomRs (-1, 1) gen)
+
+generateObstacle :: Float -> Float -> Obstacle
+generateObstacle x rand = Obstacle
+  { obstacleX = x,
     obstacleY = floorY + 25,
     obstacleWidth = 20,
     obstacleHeight = 5 + rand * 10
