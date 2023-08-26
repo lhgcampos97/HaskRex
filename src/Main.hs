@@ -11,6 +11,7 @@ data GameState = GameState
     movingLeft :: Bool,
     movingRight :: Bool,
     obstacles :: [Obstacle],
+    obstacleSpeed :: Float,
     score :: Int,
     maxScore :: Int  -- Add the maxScore field
   }
@@ -33,8 +34,17 @@ initialState :: GameData
 initialState = GameData {gameState = initialGameState, currentScreen = InitialScreen}
 
 initialGameState :: GameState
-initialGameState = GameState {barX = 0, barY = floorY + 25, isJumping = False, isCrouching = False, jumpTime = 0, movingLeft = False, movingRight = False, obstacles = [], score = 0, maxScore = 0}
-
+initialGameState = GameState { barX = 0, 
+                               barY = floorY + 25, 
+                               isJumping = False, 
+                               isCrouching = False, 
+                               jumpTime = 0, 
+                               movingLeft = False, 
+                               movingRight = False, 
+                               obstacles = [], 
+                               obstacleSpeed = 150,
+                               score = 0, 
+                               maxScore = 0}
 
 window :: Display
 window = InWindow "Jumping Bar" (800, 600) (100, 100)
@@ -77,7 +87,6 @@ render gameData =
     scorePic = translate (-350) 250 $ scale 0.2 0.2 $ color black $ text $ "Score: " ++ show (score $ gameState gameData)
     maxScorePic = translate (-350) 220 $ scale 0.2 0.2 $ color black $ text $ "Max Score: " ++ show (maxScore $ gameState gameData)
 
-
 renderObstacle :: Obstacle -> Picture
 renderObstacle obstacle = translate (obstacleX obstacle) (obstacleY obstacle) $ color red $ rectangleSolid (obstacleWidth obstacle) (obstacleHeight obstacle)
 
@@ -98,7 +107,6 @@ handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentS
       newMaxScore = max (score (gameState gameData)) (maxScore (gameState gameData))  -- Update the max score
   in GameData {gameState = newStateWithObstacles {maxScore = newMaxScore}, currentScreen = RunningScreen}
 handleInput _ gameData = gameData
-
 
 update :: Float -> GameData -> GameData
 update dt gameData@GameData{gameState = game}
@@ -140,20 +148,22 @@ generateObstacle x rand = Obstacle
     obstacleWidth = 20,
     obstacleHeight = 5 + rand * 10
   }
-
-
+  
+speedIncreaseRate :: Float
+speedIncreaseRate = 2
 
 updateObstacles :: Float -> GameState -> GameState
-updateObstacles dt game = updatedGame { obstacles = map updateObstacle (obstacles game) }
+updateObstacles dt game =
+  let newSpeed = obstacleSpeed game + speedIncreaseRate * dt
+      updatedGame = game {obstacles = map updateObstacle (obstacles game), obstacleSpeed = newSpeed}
+  in updatedGame {obstacles = filter (\o -> obstacleX o > -400) (obstacles updatedGame), score = score game + numObstaclesPassed}
   where
-    updatedGame = game { obstacles = filter (\o -> obstacleX o > -400) (obstacles game), score = score game + numObstaclesPassed }
-    updateObstacle obstacle = obstacle { obstacleX = obstacleX obstacle - 300 * dt }
+    updateObstacle obstacle = obstacle {obstacleX = obstacleX obstacle - obstacleSpeed game * dt}
     numObstaclesPassed = length $ filter (\o -> obstacleX o + obstacleWidth o <= barX game) (obstacles game)
 
 checkCollision :: GameState -> Bool
 checkCollision game =
   any (\obstacle -> collidesWith (barX game) (barY game) (obstacleX obstacle) (obstacleY obstacle) (obstacleWidth obstacle) (obstacleHeight obstacle) game) (obstacles game)
-
 
 collidesWith :: Float -> Float -> Float -> Float -> Float -> Float -> GameState -> Bool
 collidesWith playerX playerY x y width height game =
@@ -162,12 +172,8 @@ collidesWith playerX playerY x y width height game =
       yOverlap = abs (playerY - y) * 2 <= (playerHeight + height)
   in xOverlap && yOverlap
 
-
-
-
 generateInitialObstacles :: RandomGen g => g -> GameState
 generateInitialObstacles gen = initialGameState {obstacles = generateObstacles gen}
-
 
 main :: IO ()
 main = do
