@@ -6,6 +6,7 @@ data GameState = GameState
   { barX :: Float,
     barY :: Float,
     isJumping :: Bool,
+    isCrouching :: Bool,
     jumpTime :: Float,
     movingLeft :: Bool,
     movingRight :: Bool,
@@ -32,7 +33,7 @@ initialState :: GameData
 initialState = GameData {gameState = initialGameState, currentScreen = InitialScreen}
 
 initialGameState :: GameState
-initialGameState = GameState {barX = 0, barY = floorY + 25, isJumping = False, jumpTime = 0, movingLeft = False, movingRight = False, obstacles = [], score = 0, maxScore = 0}
+initialGameState = GameState {barX = 0, barY = floorY + 25, isJumping = False, isCrouching = False, jumpTime = 0, movingLeft = False, movingRight = False, obstacles = [], score = 0, maxScore = 0}
 
 
 window :: Display
@@ -43,6 +44,9 @@ background = white
 
 floorY :: Float
 floorY = -250
+
+defaultPlayerHeight :: Float
+defaultPlayerHeight = 50
 
 render :: GameData -> Picture
 render gameData =
@@ -66,7 +70,8 @@ render gameData =
         ]
   where
     currentGameState = gameState gameData
-    barPic = translate (barX currentGameState) (barY currentGameState) $ color black $ rectangleSolid 50 50
+    playerHeight  = if isCrouching currentGameState then defaultPlayerHeight * 0.5 else defaultPlayerHeight
+    barPic = translate (barX currentGameState) (barY currentGameState - defaultPlayerHeight/2 + playerHeight/2) $ color black $ rectangleSolid 50 playerHeight
     floorPic = translate 0 floorY $ color black $ rectangleSolid 800 20
     obstaclesPic = pictures $ map renderObstacle (obstacles currentGameState)
     scorePic = translate (-350) 250 $ scale 0.2 0.2 $ color black $ text $ "Score: " ++ show (score $ gameState gameData)
@@ -84,9 +89,11 @@ handleInput (EventKey (SpecialKey KeyLeft) Up _ _) gameData@GameData{gameState =
 handleInput (EventKey (SpecialKey KeyUp) Down _ _) gameData@GameData{gameState = game}
   | not (isJumping game) = gameData {gameState = jump game}
   | otherwise = gameData
+handleInput (EventKey (SpecialKey KeyDown) Down _ _) gameData@GameData{gameState = game} = gameData {gameState = game {isCrouching = True}}
+handleInput (EventKey (SpecialKey KeyDown) Up _ _) gameData@GameData{gameState = game} = gameData {gameState = game {isCrouching = False}}
 handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = InitialScreen} = gameData {currentScreen = RunningScreen}  -- Transition to RunningScreen
 handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = GameOverScreen} =
-  let gen = mkStdGen 0  -- Use a new random seed to generate new obstacles
+  let gen = mkStdGen (maxScore (gameState gameData))  -- Use the current max score as the seed
       newStateWithObstacles = generateInitialObstacles gen
       newMaxScore = max (score (gameState gameData)) (maxScore (gameState gameData))  -- Update the max score
   in GameData {gameState = newStateWithObstacles {maxScore = newMaxScore}, currentScreen = RunningScreen}
@@ -129,10 +136,12 @@ randomDistances gen = distances
 generateObstacle :: Float -> Float -> Obstacle
 generateObstacle x rand = Obstacle
   { obstacleX = x,
-    obstacleY = floorY + 25,
+    obstacleY = if rand < 0.5 then floorY + 25 else floorY + 20 + defaultPlayerHeight - (5 + rand * 10),
     obstacleWidth = 20,
     obstacleHeight = 5 + rand * 10
   }
+
+
 
 updateObstacles :: Float -> GameState -> GameState
 updateObstacles dt game = updatedGame { obstacles = map updateObstacle (obstacles game) }
@@ -143,13 +152,18 @@ updateObstacles dt game = updatedGame { obstacles = map updateObstacle (obstacle
 
 checkCollision :: GameState -> Bool
 checkCollision game =
-  any (\obstacle -> collidesWith (barX game) (barY game) (obstacleX obstacle) (obstacleY obstacle) (obstacleWidth obstacle) (obstacleHeight obstacle)) (obstacles game)
+  any (\obstacle -> collidesWith (barX game) (barY game) (obstacleX obstacle) (obstacleY obstacle) (obstacleWidth obstacle) (obstacleHeight obstacle) game) (obstacles game)
 
-collidesWith :: Float -> Float -> Float -> Float -> Float -> Float -> Bool
-collidesWith x1 y1 x2 y2 width height =
-  let xOverlap = abs (x1 - x2) * 2 <= (50 + width)
-      yOverlap = abs (y1 - y2) * 2 <= (50 + height)
+
+collidesWith :: Float -> Float -> Float -> Float -> Float -> Float -> GameState -> Bool
+collidesWith playerX playerY x y width height game =
+  let playerHeight = if isCrouching game then defaultPlayerHeight * 0.5 else defaultPlayerHeight
+      xOverlap = abs (playerX - x) * 2 <= (50 + width)
+      yOverlap = abs (playerY - y) * 2 <= (playerHeight + height)
   in xOverlap && yOverlap
+
+
+
 
 generateInitialObstacles :: RandomGen g => g -> GameState
 generateInitialObstacles gen = initialGameState {obstacles = generateObstacles gen}
