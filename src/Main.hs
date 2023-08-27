@@ -13,7 +13,11 @@ data GameState = GameState
     obstacles :: [Obstacle],
     obstacleSpeed :: Float,
     score :: Int,
-    maxScore :: Int  -- Add the maxScore field
+    maxScore :: Int,  -- Add the maxScore field
+    playerImage1 :: Picture, -- Add this field for the player's image
+    playerImage2 :: Picture,
+    currentPlayerImage :: Picture,  -- Add this field to track the current player image
+    imageAlternationTime :: Float
   }
 
 data Obstacle = Obstacle
@@ -34,17 +38,22 @@ initialState :: GameData
 initialState = GameData {gameState = initialGameState, currentScreen = InitialScreen}
 
 initialGameState :: GameState
-initialGameState = GameState { barX = 0, 
-                               barY = floorY + 25, 
-                               isJumping = False, 
-                               isCrouching = False, 
-                               jumpTime = 0, 
-                               movingLeft = False, 
-                               movingRight = False, 
-                               obstacles = [], 
-                               obstacleSpeed = 150,
-                               score = 0, 
-                               maxScore = 0}
+initialGameState = GameState {  barX = 0, 
+                                barY = floorY + 25, 
+                                isJumping = False, 
+                                isCrouching = False, 
+                                jumpTime = 0, 
+                                movingLeft = False, 
+                                movingRight = False, 
+                                obstacles = [], 
+                                obstacleSpeed = 150,
+                                score = 0, 
+                                maxScore = 0,
+                                playerImage1 = Blank,
+                                playerImage2 = Blank,
+                                currentPlayerImage = Blank,
+                                imageAlternationTime = 0
+                                }
 
 window :: Display
 window = InWindow "Jumping Bar" (800, 600) (100, 100)
@@ -67,7 +76,7 @@ render gameData =
         ]
     RunningScreen ->
       pictures
-        [ barPic,
+        [ playerPic,
           floorPic,
           obstaclesPic,
           scorePic,
@@ -79,9 +88,9 @@ render gameData =
           translate (-250) (-50) $ scale 0.3 0.3 $ color black $ text "Press Enter to Restart"
         ]
   where
+    playerPic = translate (barX currentGameState) (barY currentGameState - defaultPlayerHeight/2 + playerHeight/2) $ currentPlayerImage currentGameState  -- Use currentPlayerImage here
     currentGameState = gameState gameData
     playerHeight  = if isCrouching currentGameState then defaultPlayerHeight * 0.5 else defaultPlayerHeight
-    barPic = translate (barX currentGameState) (barY currentGameState - defaultPlayerHeight/2 + playerHeight/2) $ color black $ rectangleSolid 50 playerHeight
     floorPic = translate 0 floorY $ color black $ rectangleSolid 800 20
     obstaclesPic = pictures $ map renderObstacle (obstacles currentGameState)
     scorePic = translate (-350) 250 $ scale 0.2 0.2 $ color black $ text $ "Score: " ++ show (score $ gameState gameData)
@@ -102,10 +111,11 @@ handleInput (EventKey (SpecialKey KeyDown) Down _ _) gameData@GameData{gameState
 handleInput (EventKey (SpecialKey KeyDown) Up _ _) gameData@GameData{gameState = game} = gameData {gameState = game {isCrouching = False}}
 handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = InitialScreen} = gameData {currentScreen = RunningScreen}  -- Transition to RunningScreen
 handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = GameOverScreen} =
-  let gen = mkStdGen (maxScore (gameState gameData))  -- Use the current max score as the seed
+  let gen = mkStdGen (maxScore (gameState gameData))
       newStateWithObstacles = generateInitialObstacles gen
-      newMaxScore = max (score (gameState gameData)) (maxScore (gameState gameData))  -- Update the max score
-  in GameData {gameState = newStateWithObstacles {maxScore = newMaxScore}, currentScreen = RunningScreen}
+      newMaxScore = max (score (gameState gameData)) (maxScore (gameState gameData))
+      newStateWithImages = newStateWithObstacles { playerImage1 = playerImage1 (gameState gameData), playerImage2 = playerImage2 (gameState gameData) }
+  in GameData {gameState = newStateWithImages {maxScore = newMaxScore}, currentScreen = RunningScreen}
 handleInput _ gameData = gameData
 
 update :: Float -> GameData -> GameData
@@ -118,7 +128,14 @@ update dt gameData@GameData{gameState = game}
   | movingLeft game = gameData {gameState = updatedGame {barX = barX game - 300 * dt}}
   | otherwise = gameData {gameState = updatedGame {jumpTime = 0, maxScore = max (score updatedGame) (maxScore game)}}
   where
-    updatedGame = updateObstacles dt game
+    updatedGame = updateObstacles dt (updateImageAlternationTime game dt)  -- Pass the updated time
+
+updateImageAlternationTime :: GameState -> Float -> GameState
+updateImageAlternationTime game dt =
+  let newTime = imageAlternationTime game + dt
+      (image1, image2) = (playerImage1 game, playerImage2 game)
+      newPlayerImage = if even (floor newTime) then image1 else image2  -- Alternate images based on time
+  in game { imageAlternationTime = newTime, currentPlayerImage = newPlayerImage }  -- Update currentPlayerImage
 
 jump :: GameState -> GameState
 jump game = game {isJumping = True, jumpTime = 0}
@@ -179,5 +196,7 @@ main :: IO ()
 main = do
   gen <- newStdGen
   let initialStateWithObstacles = generateInitialObstacles gen
-      initialGameData = initialState {gameState = initialStateWithObstacles, currentScreen = InitialScreen}
+  playerImage1 <- loadBMP "images/walk_left.bmp"
+  playerImage2 <- loadBMP "images/walk_right.bmp"
+  let initialGameData = initialState { gameState = initialStateWithObstacles { playerImage1 = playerImage1, playerImage2 = playerImage2 }, currentScreen = InitialScreen }
   play window background 60 initialGameData render handleInput update
