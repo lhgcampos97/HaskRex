@@ -59,7 +59,7 @@ window :: Display
 window = InWindow "Jumping Bar" (800, 600) (100, 100)
 
 background :: Color
-background = white
+background = makeColorI 182 185 184 255  -- RGBA values for the color #B6B9B8
 
 floorY :: Float
 floorY = -250
@@ -76,9 +76,9 @@ render gameData =
         ]
     RunningScreen ->
       pictures
-        [ playerPic,
-          floorPic,
+        [ floorPic,
           obstaclesPic,
+          playerPic,
           scorePic,
           maxScorePic  -- Add this line to display the max score
         ]
