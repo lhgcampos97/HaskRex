@@ -24,7 +24,8 @@ data Obstacle = Obstacle
   { obstacleX :: Float,
     obstacleY :: Float,
     obstacleWidth :: Float,
-    obstacleHeight :: Float
+    obstacleHeight :: Float,
+    obstacleImage :: Picture  -- Add this field for the obstacle image
   }
 
 data GameScreen = InitialScreen | RunningScreen | GameOverScreen
@@ -39,7 +40,7 @@ initialState = GameData {gameState = initialGameState, currentScreen = InitialSc
 
 initialGameState :: GameState
 initialGameState = GameState {  barX = 0, 
-                                barY = floorY + 25, 
+                                barY = floorY + 20, 
                                 isJumping = False, 
                                 isCrouching = False, 
                                 jumpTime = 0, 
@@ -59,7 +60,7 @@ window :: Display
 window = InWindow "Jumping Bar" (800, 600) (100, 100)
 
 background :: Color
-background = makeColorI 182 185 184 255  -- RGBA values for the color #B6B9B8
+background = white
 
 floorY :: Float
 floorY = -250
@@ -91,13 +92,13 @@ render gameData =
     playerPic = translate (barX currentGameState) (barY currentGameState - defaultPlayerHeight/2 + playerHeight/2) $ currentPlayerImage currentGameState  -- Use currentPlayerImage here
     currentGameState = gameState gameData
     playerHeight  = if isCrouching currentGameState then defaultPlayerHeight * 0.5 else defaultPlayerHeight
-    floorPic = translate 0 floorY $ color black $ rectangleSolid 800 20
+    floorPic = translate 0 floorY $ color black $ rectangleSolid 800 2
     obstaclesPic = pictures $ map renderObstacle (obstacles currentGameState)
     scorePic = translate (-350) 250 $ scale 0.2 0.2 $ color black $ text $ "Score: " ++ show (score $ gameState gameData)
     maxScorePic = translate (-350) 220 $ scale 0.2 0.2 $ color black $ text $ "Max Score: " ++ show (maxScore $ gameState gameData)
 
 renderObstacle :: Obstacle -> Picture
-renderObstacle obstacle = translate (obstacleX obstacle) (obstacleY obstacle) $ color red $ rectangleSolid (obstacleWidth obstacle) (obstacleHeight obstacle)
+renderObstacle obstacle = translate (obstacleX obstacle) (obstacleY obstacle) $ obstacleImage obstacle
 
 handleInput :: Event -> GameData -> GameData
 handleInput (EventKey (SpecialKey KeyRight) Down _ _) gameData@GameData{gameState = game} = gameData {gameState = game {movingRight = True}}
@@ -146,25 +147,27 @@ baseObstacleSpace = 400
 
 -- Modify the generateObstacles function
 generateObstacles :: RandomGen g => g -> [Obstacle]
-generateObstacles gen = obstacles
+generateObstacles gen = map (\(x, r) -> generateObstacle x r obstacleImage) $ zip obstacleXPositions (randoms gen')
   where
     (numObstacles, gen') = randomR (5, 1000) gen
     obstacleWidth = 20
     obstacleXPositions = scanl (+) (800 + obstacleWidth) (take numObstacles (randomDistances gen'))
-    obstacles = zipWith generateObstacle obstacleXPositions $ randoms gen'
+    obstacleImage = Blank  -- Replace with your actual obstacle image
 
 randomDistances :: RandomGen g => g -> [Float]
 randomDistances gen = distances
   where
     distances = map (\x -> baseObstacleSpace + x * 200) (randomRs (-1, 1) gen)
 
-generateObstacle :: Float -> Float -> Obstacle
-generateObstacle x rand = Obstacle
+generateObstacle :: Float -> Float -> Picture -> Obstacle
+generateObstacle x rand image = Obstacle
   { obstacleX = x,
     obstacleY = if rand < 0.5 then floorY + 25 else floorY + 20 + defaultPlayerHeight - (5 + rand * 10),
     obstacleWidth = 20,
-    obstacleHeight = 5 + rand * 10
+    obstacleHeight = 30,
+    obstacleImage = image  -- Store the loaded obstacle image
   }
+
   
 speedIncreaseRate :: Float
 speedIncreaseRate = 2
@@ -196,7 +199,8 @@ main :: IO ()
 main = do
   gen <- newStdGen
   let initialStateWithObstacles = generateInitialObstacles gen
-  playerImage1 <- loadBMP "images/walk_left.bmp"
-  playerImage2 <- loadBMP "images/walk_right.bmp"
+  playerImage1 <- loadBMP "images/walk_left_white.bmp"
+  playerImage2 <- loadBMP "images/walk_right_white.bmp"
+  obstacleImage <- loadBMP "images/obstacle1.bmp"  -- Load obstacle image
   let initialGameData = initialState { gameState = initialStateWithObstacles { playerImage1 = playerImage1, playerImage2 = playerImage2 }, currentScreen = InitialScreen }
-  play window background 60 initialGameData render handleInput update
+  play window background 60 initialGameData { gameState = (gameState initialGameData) { obstacles = map (\obstacle -> obstacle { obstacleImage = obstacleImage }) (obstacles (gameState initialGameData)) } } render handleInput update
