@@ -35,6 +35,15 @@ data GameData = GameData
     currentScreen :: GameScreen
   }
 
+-- Initialize the initial game state with loaded images
+initializeGameState :: GameState -> (Picture, Picture, Picture) -> GameState
+initializeGameState gameState (playerImage1, playerImage2, obstacleImage) =
+  gameState
+    { playerImage1 = playerImage1,
+      playerImage2 = playerImage2,
+      obstacles = map (\obstacle -> obstacle {obstacleImage = obstacleImage}) (obstacles gameState)
+    }
+
 initialState :: GameData
 initialState = GameData {gameState = initialGameState, currentScreen = InitialScreen}
 
@@ -115,8 +124,10 @@ handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentS
   let gen = mkStdGen (maxScore (gameState gameData))
       newStateWithObstacles = generateInitialObstacles gen
       newMaxScore = max (score (gameState gameData)) (maxScore (gameState gameData))
-      newStateWithImages = newStateWithObstacles { playerImage1 = playerImage1 (gameState gameData), playerImage2 = playerImage2 (gameState gameData) }
+      newStateWithImages = initializeGameState newStateWithObstacles images
   in GameData {gameState = newStateWithImages {maxScore = newMaxScore}, currentScreen = RunningScreen}
+  where
+    images = (playerImage1 (gameState gameData), playerImage2 (gameState gameData), obstacleImage (head (obstacles (gameState gameData))))
 handleInput _ gameData = gameData
 
 update :: Float -> GameData -> GameData
