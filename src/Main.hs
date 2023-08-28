@@ -13,10 +13,10 @@ data GameState = GameState
     obstacles :: [Obstacle],
     obstacleSpeed :: Float,
     score :: Int,
-    maxScore :: Int,  -- Add the maxScore field
-    playerImage1 :: Picture, -- Add this field for the player's image
+    maxScore :: Int, 
+    playerImage1 :: Picture, 
     playerImage2 :: Picture,
-    currentPlayerImage :: Picture,  -- Add this field to track the current player image
+    currentPlayerImage :: Picture,  
     imageAlternationTime :: Float,
     hasWon :: Bool
   }
@@ -28,7 +28,7 @@ data Obstacle = Obstacle
     obstacleY :: Float,
     obstacleWidth :: Float,
     obstacleHeight :: Float,
-    obstacleType :: ObstacleType, -- Add this field for the obstacle type
+    obstacleType :: ObstacleType, 
     obstacleImage :: Picture
   }
 
@@ -37,17 +37,18 @@ data GameScreen = InitialScreen | RunningScreen | GameOverScreen | WinnerScreen 
 data GameData = GameData
   { gameState :: GameState,
     currentScreen :: GameScreen,
-    clouds :: [Cloud]  -- Add this field for clouds
+    clouds :: [Cloud] 
   }
 
 data Cloud = Cloud
   { cloudX :: Float,
     cloudY :: Float,
     cloudScale :: Float,
-    cloudImage :: Picture  -- Add this field for the cloud image
+    cloudImage :: Picture  
   }
 
--- Initialize the initial game state with loaded images
+----- Initialize the game state with loaded images -----
+
 initializeGameState :: GameState -> (Picture, Picture, Picture) -> GameState
 initializeGameState gameState (playerImage1, playerImage2, obstacleImage) =
   gameState
@@ -59,7 +60,7 @@ initializeGameState gameState (playerImage1, playerImage2, obstacleImage) =
 initialState :: GameData
 initialState = GameData {gameState = initialGameState, currentScreen = InitialScreen, clouds = initialClouds cloudsImage }
   where
-    cloudsImage = Blank -- You can load the actual cloud image here
+    cloudsImage = Blank
 
 
 initialClouds :: Picture -> [Cloud]
@@ -95,6 +96,8 @@ initialGameState = GameState {  barX = 0,
                                 hasWon = False
                                 }
 
+----- Set the value of the game structures and constants -----
+
 window :: Display
 window = InWindow "HaskRex" (800, 600) (100, 100)
 
@@ -107,15 +110,24 @@ floorY = -250
 defaultPlayerHeight :: Float
 defaultPlayerHeight = 25
 
+baseObstacleSpace :: Float
+baseObstacleSpace = 500
+
+speedIncreaseRate :: Float
+speedIncreaseRate = 2
+
+----- Rendering ------
+
 render :: GameData -> Picture
 render gameData =
   case currentScreen gameData of
     InitialScreen ->
       pictures
         [ pictures (map renderCloud (clouds gameData)), 
-          translate (-135) 200 $ scale 0.5 0.5 $ color black $ text "HaskRex",  -- Add the game title
-          translate (-210) (-100) $ scale 0.3 0.3 $ color red $ text "Press Enter to Start",
           playerPic,
+          translate (-135) 200 $ scale 0.5 0.5 $ color black $ text "HaskRex", 
+          translate (-210) (-100) $ scale 0.3 0.3 $ color red $ text "Press Enter to Start",
+          instructionText, 
           floorPic
         ]
     RunningScreen ->
@@ -151,6 +163,7 @@ render gameData =
     obstaclesPic = pictures $ map renderObstacle (obstacles currentGameState)
     scorePic = translate (-350) 250 $ scale 0.2 0.2 $ color black $ text $ "Score: " ++ show (score $ gameState gameData)
     maxScorePic = translate (-350) 220 $ scale 0.2 0.2 $ color black $ text $ "Max Score: " ++ show (maxScore $ gameState gameData)
+    instructionText = translate (-180) (-200) $ scale 0.1 0.1 $ color black $ text "Instructions: Press Up/Down Arrow to Jump/Crouch"
 
 renderObstacle :: Obstacle -> Picture
 renderObstacle obstacle = translate (obstacleX obstacle) (obstacleY obstacle) $ obstacleImage obstacle
@@ -158,7 +171,10 @@ renderObstacle obstacle = translate (obstacleX obstacle) (obstacleY obstacle) $ 
 renderCloud :: Cloud -> Picture
 renderCloud cloud = translate (cloudX cloud) (cloudY cloud) $ scale (cloudScale cloud) (cloudScale cloud) (cloudImage cloud)
 
-handleInput :: Event -> GameData -> GameData
+
+----- Handle the user's inputs -----
+
+handleInput :: Event -> GameData -> GameData 
 handleInput (EventKey (SpecialKey KeyRight) Down _ _) gameData@GameData{gameState = game} = gameData {gameState = game {movingRight = True}}
 handleInput (EventKey (SpecialKey KeyRight) Up _ _) gameData@GameData{gameState = game} = gameData {gameState = game {movingRight = False}}
 handleInput (EventKey (SpecialKey KeyLeft) Down _ _) gameData@GameData{gameState = game} = gameData {gameState = game {movingLeft = True}}
@@ -169,16 +185,18 @@ handleInput (EventKey (SpecialKey KeyUp) Down _ _) gameData@GameData{gameState =
 handleInput (EventKey (SpecialKey KeyDown) Down _ _) gameData@GameData{gameState = game} = gameData {gameState = game {isCrouching = True}}
 handleInput (EventKey (SpecialKey KeyDown) Up _ _) gameData@GameData{gameState = game} = gameData {gameState = game {isCrouching = False}}
 handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = InitialScreen} = gameData {currentScreen = RunningScreen}  -- Transition to RunningScreen
-handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = GameOverScreen} =
+handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = GameOverScreen} = -- Transition to GameOverScreen 
   let gen = mkStdGen (maxScore (gameState gameData))
       newStateWithObstacles = generateInitialObstacles gen
       newMaxScore = max (score (gameState gameData)) (maxScore (gameState gameData))
       newStateWithImages = initializeGameState newStateWithObstacles images
-  in GameData {gameState = newStateWithImages {maxScore = newMaxScore}, currentScreen = RunningScreen, clouds = clouds gameData}  -- Pass clouds along
+  in GameData {gameState = newStateWithImages {maxScore = newMaxScore}, currentScreen = RunningScreen, clouds = clouds gameData} 
   where
     images = (playerImage1 (gameState gameData), playerImage2 (gameState gameData), obstacleImage (head (obstacles (gameState gameData))))
-handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = WinnerScreen} = gameData  -- Transition to InitialScreen    
+handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = WinnerScreen} = gameData  -- Transition to InitialScreen (Restart)  
 handleInput _ gameData = gameData
+
+----- Update the game state constantly and track the changes -----
 
 update :: Float -> GameData -> GameData
 update dt gameData@GameData{currentScreen = screen} =
@@ -190,60 +208,21 @@ updateRunningScreen :: Float -> GameData -> GameData
 updateRunningScreen dt gameData@GameData{gameState = game}
   | score game >= 10000 = gameData {currentScreen = WinnerScreen, gameState = game {hasWon = True}}  -- Trigger the winner screen
   | checkCollision game = gameData {currentScreen = GameOverScreen}  -- Transition to GameOverScreen on collision
-  | isJumping game && jumpTime game < 0.5 = gameData {gameState = updatedGame {barY = barY updatedGame + 200 * dt, jumpTime = jumpTime game + dt}}
+  | isJumping game && jumpTime game < 0.5 = gameData {gameState = updatedGame {barY = barY updatedGame + 200 * dt, jumpTime = jumpTime game + dt}} -- Simulate a jump rise and fall
   | isJumping game && jumpTime game >= 0.5 && barY updatedGame > floorY + 25 = gameData {gameState = updatedGame {barY = barY updatedGame - 200 * dt, jumpTime = jumpTime game + dt}}
   | isJumping game && barY updatedGame <= floorY + 25 = gameData {gameState = updatedGame {barY = floorY + 25, isJumping = False, jumpTime = 0}}
   | movingRight game = gameData {gameState = updatedGame {barX = barX game + 300 * dt}}
   | movingLeft game = gameData {gameState = updatedGame {barX = barX game - 300 * dt}}
   | otherwise = gameData {gameState = updatedGame {jumpTime = 0, maxScore = max (score updatedGame) (maxScore game)}}
   where
-    updatedGame = updateObstacles dt (updateImageAlternationTime game dt)  -- Pass the updated time
+    updatedGame = updateObstacles dt (updateImageAlternationTime game dt)
 
 updateImageAlternationTime :: GameState -> Float -> GameState
 updateImageAlternationTime game dt =
   let newTime = imageAlternationTime game + dt
       (image1, image2) = (playerImage1 game, playerImage2 game)
-      newPlayerImage = if even (floor newTime) then image1 else image2  -- Alternate images based on time
-  in game { imageAlternationTime = newTime, currentPlayerImage = newPlayerImage }  -- Update currentPlayerImage
-
-jump :: GameState -> GameState
-jump game = game {isJumping = True, jumpTime = 0}
-
--- Define base obstacle space as a constant
-baseObstacleSpace :: Float
-baseObstacleSpace = 400
-
--- Modify the generateObstacles function
-generateObstacles :: RandomGen g => g -> [Obstacle]
-generateObstacles gen = map (\(x, r) -> generateObstacle x r (randomObstacleType r) obstacleImage) $ zip obstacleXPositions (randoms gen')
-  where
-    (numObstacles, gen') = randomR (700, 1000) gen
-    obstacleWidth = 20
-    obstacleXPositions = scanl (+) (800 + obstacleWidth) (take numObstacles (randomDistances gen'))
-    obstacleImage = Blank
-    randomObstacleType r
-      | r < (-0.5) = FloorObstacle
-      | r > 0.5 = FloatingObstacle
-      | otherwise = if even (floor (r * 10)) then FloorObstacle else FloatingObstacle
-
-
-randomDistances :: RandomGen g => g -> [Float]
-randomDistances gen = distances
-  where
-    distances = map (\x -> baseObstacleSpace + x * 200) (randomRs (-1, 1) gen)
-
-generateObstacle :: Float -> Float -> ObstacleType -> Picture -> Obstacle
-generateObstacle x rand obstacleType image = Obstacle
-  { obstacleX = x,
-    obstacleY = if obstacleType == FloorObstacle then floorY + 13 else floorY + 40 + defaultPlayerHeight - (rand * 10),
-    obstacleWidth = 20,
-    obstacleHeight = 40,
-    obstacleType = obstacleType,  -- Set the obstacle type
-    obstacleImage = image
-  }
-
-speedIncreaseRate :: Float
-speedIncreaseRate = 2
+      newPlayerImage = if even (floor newTime :: Int) then image1 else image2
+  in game { imageAlternationTime = newTime, currentPlayerImage = newPlayerImage }
 
 updateObstacles :: Float -> GameState -> GameState
 updateObstacles dt game =
@@ -253,6 +232,43 @@ updateObstacles dt game =
   where
     updateObstacle obstacle = obstacle {obstacleX = obstacleX obstacle - obstacleSpeed game * dt}
     numObstaclesPassed = length $ filter (\o -> obstacleX o + obstacleWidth o <= barX game) (obstacles game)
+
+jump :: GameState -> GameState
+jump game = game {isJumping = True, jumpTime = 0}
+
+----- Obstacles generation -----
+
+generateObstacles :: RandomGen g => g -> [Obstacle]
+generateObstacles gen = map (\(x, r) -> generateObstacle x r (randomObstacleType r) obstacleImage) $ zip obstacleXPositions (randoms gen')
+  where
+    (numObstacles, gen') = randomR (700, 1000) gen
+    obstacleWidth = 20
+    obstacleXPositions = scanl (+) (800 + obstacleWidth) (take numObstacles (randomDistances gen'))
+    obstacleImage = Blank
+    randomObstacleType r
+        | r < (- 0.5) = FloorObstacle
+        | r > 0.5 = FloatingObstacle
+        | otherwise = if even (floor (r * 10)) then FloorObstacle else FloatingObstacle
+
+generateObstacle :: Float -> Float -> ObstacleType -> Picture -> Obstacle
+generateObstacle x rand obstacleType image = Obstacle
+  { obstacleX = x,
+    obstacleY = if obstacleType == FloorObstacle then floorY + 13 else floorY + 40 + defaultPlayerHeight - (rand * 10),
+    obstacleWidth = 15,
+    obstacleHeight = 40,
+    obstacleType = obstacleType, 
+    obstacleImage = image
+  }
+
+generateInitialObstacles :: RandomGen g => g -> GameState
+generateInitialObstacles gen = initialGameState {obstacles = generateObstacles gen}
+
+randomDistances :: RandomGen g => g -> [Float]
+randomDistances gen = distances
+  where
+    distances = map (\x -> baseObstacleSpace + x * 200) (randomRs (-1, 1) gen)
+
+----- Collision checks -----
 
 checkCollision :: GameState -> Bool
 checkCollision game =
@@ -265,18 +281,16 @@ collidesWith playerX playerY x y width height game =
       yOverlap = abs (playerY - y) * 2 <= (playerHeight + height)
   in xOverlap && yOverlap
 
-generateInitialObstacles :: RandomGen g => g -> GameState
-generateInitialObstacles gen = initialGameState {obstacles = generateObstacles gen}
 
 main :: IO ()
 main = do
   gen <- newStdGen
   let initialStateWithObstacles = generateInitialObstacles gen
-  playerImage1 <- loadBMP "images/walk_left_white.bmp"
-  playerImage2 <- loadBMP "images/walk_right_white.bmp"
-  floorObstacleImage <- loadBMP "images/obstacle1.bmp"
-  belowPlayerObstacleImage <- loadBMP "images/obstacle2.bmp"
-  cloudsImage <- loadBMP "images/cloud.bmp"  -- Load clouds image here
-  let initialGameData = initialState { gameState = initialStateWithObstacles { playerImage1 = playerImage1, playerImage2 = playerImage2 }, currentScreen = InitialScreen, clouds = initialClouds cloudsImage }
-  let obstaclesWithImages = map (\obstacle -> if obstacleType obstacle == FloorObstacle then obstacle { obstacleImage = floorObstacleImage } else obstacle { obstacleImage = belowPlayerObstacleImage }) (obstacles (gameState initialGameData))
+  playerImage1' <- loadBMP "./images/walk_left_white.bmp"
+  playerImage2' <- loadBMP "./images/walk_right_white.bmp"
+  floorObstacleImage' <- loadBMP "./images/obstacle1.bmp"
+  floatingObstacleImage' <- loadBMP "./images/obstacle2.bmp"
+  cloudsImage' <- loadBMP "./images/cloud.bmp" 
+  let initialGameData = initialState { gameState = initialStateWithObstacles { playerImage1 = playerImage1', playerImage2 = playerImage2' }, currentScreen = InitialScreen, clouds = initialClouds cloudsImage' }
+  let obstaclesWithImages = map (\obstacle -> if obstacleType obstacle == FloorObstacle then obstacle { obstacleImage = floorObstacleImage' } else obstacle { obstacleImage = floatingObstacleImage' }) (obstacles (gameState initialGameData))
   play window background 60 initialGameData { gameState = (gameState initialGameData) { obstacles = obstaclesWithImages } } render handleInput update
