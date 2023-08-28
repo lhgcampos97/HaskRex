@@ -17,7 +17,8 @@ data GameState = GameState
     playerImage1 :: Picture, -- Add this field for the player's image
     playerImage2 :: Picture,
     currentPlayerImage :: Picture,  -- Add this field to track the current player image
-    imageAlternationTime :: Float
+    imageAlternationTime :: Float,
+    hasWon :: Bool
   }
 
 data ObstacleType = FloorObstacle | FloatingObstacle deriving (Eq, Show)
@@ -31,7 +32,7 @@ data Obstacle = Obstacle
     obstacleImage :: Picture
   }
 
-data GameScreen = InitialScreen | RunningScreen | GameOverScreen
+data GameScreen = InitialScreen | RunningScreen | GameOverScreen | WinnerScreen deriving (Eq)
 
 data GameData = GameData
   { gameState :: GameState,
@@ -90,7 +91,8 @@ initialGameState = GameState {  barX = 0,
                                 playerImage1 = Blank,
                                 playerImage2 = Blank,
                                 currentPlayerImage = Blank,
-                                imageAlternationTime = 0
+                                imageAlternationTime = 0,
+                                hasWon = False
                                 }
 
 window :: Display
@@ -110,7 +112,11 @@ render gameData =
   case currentScreen gameData of
     InitialScreen ->
       pictures
-        [ translate (-210) 0 $ scale 0.3 0.3 $ color black $ text "Press Enter to Start"
+        [ pictures (map renderCloud (clouds gameData)), 
+          translate (-135) 200 $ scale 0.5 0.5 $ color black $ text "HaskRex",  -- Add the game title
+          translate (-210) (-100) $ scale 0.3 0.3 $ color red $ text "Press Enter to Start",
+          playerPic,
+          floorPic
         ]
     RunningScreen ->
       pictures
@@ -126,7 +132,16 @@ render gameData =
         [ playerPic,
           obstaclesPic,
           translate (-135) 50 $ scale 0.3 0.3 $ color black $ text "Game Over",
-          translate (-230) (-50) $ scale 0.3 0.3 $ color black $ text "Press Enter to Restart"
+          translate (-230) (-50) $ scale 0.3 0.3 $ color red $ text "Press Enter to Restart"
+        ]
+    WinnerScreen ->
+      pictures
+        [ translate (-155) 90 $ scale 0.3 0.3 $ color black $ text "You're still here?",
+          translate (-80) 40 $ scale 0.3 0.3 $ color black $ text "It's Over",
+          translate (-155) (-10) $ scale 0.3 0.3 $ color black $ text "Go Home... Go!",
+          playerPic,
+          floorPic,
+          pictures (map renderCloud (clouds gameData))
         ]
   where
     playerPic = translate (barX currentGameState) (barY currentGameState - defaultPlayerHeight/2 + playerHeight/2) $ currentPlayerImage currentGameState  -- Use currentPlayerImage here
@@ -162,10 +177,18 @@ handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentS
   in GameData {gameState = newStateWithImages {maxScore = newMaxScore}, currentScreen = RunningScreen, clouds = clouds gameData}  -- Pass clouds along
   where
     images = (playerImage1 (gameState gameData), playerImage2 (gameState gameData), obstacleImage (head (obstacles (gameState gameData))))
+handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentScreen = WinnerScreen} = gameData  -- Transition to InitialScreen    
 handleInput _ gameData = gameData
 
 update :: Float -> GameData -> GameData
-update dt gameData@GameData{gameState = game}
+update dt gameData@GameData{currentScreen = screen} =
+  case screen of
+    RunningScreen -> updateRunningScreen dt gameData
+    _ -> gameData
+
+updateRunningScreen :: Float -> GameData -> GameData
+updateRunningScreen dt gameData@GameData{gameState = game}
+  | score game >= 10000 = gameData {currentScreen = WinnerScreen, gameState = game {hasWon = True}}  -- Trigger the winner screen
   | checkCollision game = gameData {currentScreen = GameOverScreen}  -- Transition to GameOverScreen on collision
   | isJumping game && jumpTime game < 0.5 = gameData {gameState = updatedGame {barY = barY updatedGame + 200 * dt, jumpTime = jumpTime game + dt}}
   | isJumping game && jumpTime game >= 0.5 && barY updatedGame > floorY + 25 = gameData {gameState = updatedGame {barY = barY updatedGame - 200 * dt, jumpTime = jumpTime game + dt}}
@@ -194,7 +217,7 @@ baseObstacleSpace = 400
 generateObstacles :: RandomGen g => g -> [Obstacle]
 generateObstacles gen = map (\(x, r) -> generateObstacle x r (randomObstacleType r) obstacleImage) $ zip obstacleXPositions (randoms gen')
   where
-    (numObstacles, gen') = randomR (5, 1000) gen
+    (numObstacles, gen') = randomR (700, 1000) gen
     obstacleWidth = 20
     obstacleXPositions = scanl (+) (800 + obstacleWidth) (take numObstacles (randomDistances gen'))
     obstacleImage = Blank
