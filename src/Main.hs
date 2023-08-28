@@ -20,19 +20,30 @@ data GameState = GameState
     imageAlternationTime :: Float
   }
 
+data ObstacleType = FloorObstacle | BelowPlayerObstacle deriving (Eq, Show)
+
 data Obstacle = Obstacle
   { obstacleX :: Float,
     obstacleY :: Float,
     obstacleWidth :: Float,
     obstacleHeight :: Float,
-    obstacleImage :: Picture  -- Add this field for the obstacle image
+    obstacleType :: ObstacleType, -- Add this field for the obstacle type
+    obstacleImage :: Picture
   }
 
 data GameScreen = InitialScreen | RunningScreen | GameOverScreen
 
 data GameData = GameData
   { gameState :: GameState,
-    currentScreen :: GameScreen
+    currentScreen :: GameScreen,
+    clouds :: [Cloud]  -- Add this field for clouds
+  }
+
+data Cloud = Cloud
+  { cloudX :: Float,
+    cloudY :: Float,
+    cloudScale :: Float,
+    cloudImage :: Picture  -- Add this field for the cloud image
   }
 
 -- Initialize the initial game state with loaded images
@@ -45,7 +56,24 @@ initializeGameState gameState (playerImage1, playerImage2, obstacleImage) =
     }
 
 initialState :: GameData
-initialState = GameData {gameState = initialGameState, currentScreen = InitialScreen}
+initialState = GameData {gameState = initialGameState, currentScreen = InitialScreen, clouds = initialClouds cloudsImage }
+  where
+    cloudsImage = Blank -- You can load the actual cloud image here
+
+
+initialClouds :: Picture -> [Cloud]
+initialClouds cloudImg =
+  [ Cloud { cloudX = -300, cloudY = 200, cloudScale = 0.5, cloudImage = cloudImg }
+  , Cloud { cloudX = -100, cloudY = 150, cloudScale = 0.4, cloudImage = cloudImg }
+  , Cloud { cloudX = 100, cloudY = 180, cloudScale = 0.6, cloudImage = cloudImg }
+  , Cloud { cloudX = 300, cloudY = 170, cloudScale = 0.3, cloudImage = cloudImg }
+  , Cloud { cloudX = 500, cloudY = 190, cloudScale = 0.7, cloudImage = cloudImg }
+  , Cloud { cloudX = -200, cloudY = 100, cloudScale = 0.4, cloudImage = cloudImg }
+  , Cloud { cloudX = 0, cloudY = 130, cloudScale = 0.5, cloudImage = cloudImg }
+  , Cloud { cloudX = 200, cloudY = 120, cloudScale = 0.6, cloudImage = cloudImg }
+  , Cloud { cloudX = 400, cloudY = 140, cloudScale = 0.4, cloudImage = cloudImg }
+  , Cloud { cloudX = 600, cloudY = 160, cloudScale = 0.5, cloudImage = cloudImg }
+  ]
 
 initialGameState :: GameState
 initialGameState = GameState {  barX = 0, 
@@ -90,11 +118,14 @@ render gameData =
           obstaclesPic,
           playerPic,
           scorePic,
-          maxScorePic  -- Add this line to display the max score
+          maxScorePic,
+          pictures (map renderCloud (clouds gameData)) 
         ]
     GameOverScreen ->
       pictures
-        [ translate (-175) 50 $ scale 0.3 0.3 $ color black $ text "Game Over",
+        [ playerPic,
+          obstaclesPic,
+          translate (-175) 50 $ scale 0.3 0.3 $ color black $ text "Game Over",
           translate (-250) (-50) $ scale 0.3 0.3 $ color black $ text "Press Enter to Restart"
         ]
   where
@@ -108,6 +139,9 @@ render gameData =
 
 renderObstacle :: Obstacle -> Picture
 renderObstacle obstacle = translate (obstacleX obstacle) (obstacleY obstacle) $ obstacleImage obstacle
+
+renderCloud :: Cloud -> Picture
+renderCloud cloud = translate (cloudX cloud) (cloudY cloud) $ scale (cloudScale cloud) (cloudScale cloud) (cloudImage cloud)
 
 handleInput :: Event -> GameData -> GameData
 handleInput (EventKey (SpecialKey KeyRight) Down _ _) gameData@GameData{gameState = game} = gameData {gameState = game {movingRight = True}}
@@ -125,7 +159,7 @@ handleInput (EventKey (SpecialKey KeyEnter) Down _ _) gameData@GameData{currentS
       newStateWithObstacles = generateInitialObstacles gen
       newMaxScore = max (score (gameState gameData)) (maxScore (gameState gameData))
       newStateWithImages = initializeGameState newStateWithObstacles images
-  in GameData {gameState = newStateWithImages {maxScore = newMaxScore}, currentScreen = RunningScreen}
+  in GameData {gameState = newStateWithImages {maxScore = newMaxScore}, currentScreen = RunningScreen, clouds = clouds gameData}  -- Pass clouds along
   where
     images = (playerImage1 (gameState gameData), playerImage2 (gameState gameData), obstacleImage (head (obstacles (gameState gameData))))
 handleInput _ gameData = gameData
@@ -158,28 +192,29 @@ baseObstacleSpace = 400
 
 -- Modify the generateObstacles function
 generateObstacles :: RandomGen g => g -> [Obstacle]
-generateObstacles gen = map (\(x, r) -> generateObstacle x r obstacleImage) $ zip obstacleXPositions (randoms gen')
+generateObstacles gen = map (\(x, r, obstacleType) -> generateObstacle x r obstacleType obstacleImage) $ zip3 obstacleXPositions (randoms gen') obstacleTypes
   where
     (numObstacles, gen') = randomR (5, 1000) gen
     obstacleWidth = 20
     obstacleXPositions = scanl (+) (800 + obstacleWidth) (take numObstacles (randomDistances gen'))
-    obstacleImage = Blank  -- Replace with your actual obstacle image
+    obstacleTypes = cycle [FloorObstacle, BelowPlayerObstacle]  -- Alternate between the obstacle types
+    obstacleImage = Blank
 
 randomDistances :: RandomGen g => g -> [Float]
 randomDistances gen = distances
   where
     distances = map (\x -> baseObstacleSpace + x * 200) (randomRs (-1, 1) gen)
 
-generateObstacle :: Float -> Float -> Picture -> Obstacle
-generateObstacle x rand image = Obstacle
+generateObstacle :: Float -> Float -> ObstacleType -> Picture -> Obstacle
+generateObstacle x rand obstacleType image = Obstacle
   { obstacleX = x,
-    obstacleY = if rand < 0.5 then floorY + 25 else floorY + 20 + defaultPlayerHeight - (5 + rand * 10),
+    obstacleY = if obstacleType == FloorObstacle then floorY + 25 else floorY + 20 + defaultPlayerHeight - (5 + rand * 10),
     obstacleWidth = 20,
     obstacleHeight = 30,
-    obstacleImage = image  -- Store the loaded obstacle image
+    obstacleType = obstacleType,  -- Set the obstacle type
+    obstacleImage = image
   }
 
-  
 speedIncreaseRate :: Float
 speedIncreaseRate = 2
 
@@ -212,6 +247,9 @@ main = do
   let initialStateWithObstacles = generateInitialObstacles gen
   playerImage1 <- loadBMP "images/walk_left_white.bmp"
   playerImage2 <- loadBMP "images/walk_right_white.bmp"
-  obstacleImage <- loadBMP "images/obstacle1.bmp"  -- Load obstacle image
-  let initialGameData = initialState { gameState = initialStateWithObstacles { playerImage1 = playerImage1, playerImage2 = playerImage2 }, currentScreen = InitialScreen }
-  play window background 60 initialGameData { gameState = (gameState initialGameData) { obstacles = map (\obstacle -> obstacle { obstacleImage = obstacleImage }) (obstacles (gameState initialGameData)) } } render handleInput update
+  floorObstacleImage <- loadBMP "images/obstacle1.bmp"
+  belowPlayerObstacleImage <- loadBMP "images/obstacle2.bmp"
+  cloudsImage <- loadBMP "images/cloud.bmp"  -- Load clouds image here
+  let initialGameData = initialState { gameState = initialStateWithObstacles { playerImage1 = playerImage1, playerImage2 = playerImage2 }, currentScreen = InitialScreen, clouds = initialClouds cloudsImage }
+  let obstaclesWithImages = map (\obstacle -> if obstacleType obstacle == FloorObstacle then obstacle { obstacleImage = floorObstacleImage } else obstacle { obstacleImage = belowPlayerObstacleImage }) (obstacles (gameState initialGameData))
+  play window background 60 initialGameData { gameState = (gameState initialGameData) { obstacles = obstaclesWithImages } } render handleInput update
