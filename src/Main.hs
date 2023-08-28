@@ -20,7 +20,7 @@ data GameState = GameState
     imageAlternationTime :: Float
   }
 
-data ObstacleType = FloorObstacle | BelowPlayerObstacle deriving (Eq, Show)
+data ObstacleType = FloorObstacle | FloatingObstacle deriving (Eq, Show)
 
 data Obstacle = Obstacle
   { obstacleX :: Float,
@@ -94,7 +94,7 @@ initialGameState = GameState {  barX = 0,
                                 }
 
 window :: Display
-window = InWindow "Jumping Bar" (800, 600) (100, 100)
+window = InWindow "HaskRex" (800, 600) (100, 100)
 
 background :: Color
 background = white
@@ -103,20 +103,20 @@ floorY :: Float
 floorY = -250
 
 defaultPlayerHeight :: Float
-defaultPlayerHeight = 50
+defaultPlayerHeight = 25
 
 render :: GameData -> Picture
 render gameData =
   case currentScreen gameData of
     InitialScreen ->
       pictures
-        [ translate (-175) 0 $ scale 0.3 0.3 $ color black $ text "Press Enter to Start"
+        [ translate (-210) 0 $ scale 0.3 0.3 $ color black $ text "Press Enter to Start"
         ]
     RunningScreen ->
       pictures
-        [ floorPic,
+        [ playerPic,
           obstaclesPic,
-          playerPic,
+          floorPic,
           scorePic,
           maxScorePic,
           pictures (map renderCloud (clouds gameData)) 
@@ -125,14 +125,14 @@ render gameData =
       pictures
         [ playerPic,
           obstaclesPic,
-          translate (-175) 50 $ scale 0.3 0.3 $ color black $ text "Game Over",
-          translate (-250) (-50) $ scale 0.3 0.3 $ color black $ text "Press Enter to Restart"
+          translate (-135) 50 $ scale 0.3 0.3 $ color black $ text "Game Over",
+          translate (-230) (-50) $ scale 0.3 0.3 $ color black $ text "Press Enter to Restart"
         ]
   where
     playerPic = translate (barX currentGameState) (barY currentGameState - defaultPlayerHeight/2 + playerHeight/2) $ currentPlayerImage currentGameState  -- Use currentPlayerImage here
     currentGameState = gameState gameData
     playerHeight  = if isCrouching currentGameState then defaultPlayerHeight * 0.5 else defaultPlayerHeight
-    floorPic = translate 0 floorY $ color black $ rectangleSolid 800 2
+    floorPic = translate 0 floorY $ color (makeColorI 83 83 83 255)  $ rectangleSolid 800 1
     obstaclesPic = pictures $ map renderObstacle (obstacles currentGameState)
     scorePic = translate (-350) 250 $ scale 0.2 0.2 $ color black $ text $ "Score: " ++ show (score $ gameState gameData)
     maxScorePic = translate (-350) 220 $ scale 0.2 0.2 $ color black $ text $ "Max Score: " ++ show (maxScore $ gameState gameData)
@@ -192,13 +192,17 @@ baseObstacleSpace = 400
 
 -- Modify the generateObstacles function
 generateObstacles :: RandomGen g => g -> [Obstacle]
-generateObstacles gen = map (\(x, r, obstacleType) -> generateObstacle x r obstacleType obstacleImage) $ zip3 obstacleXPositions (randoms gen') obstacleTypes
+generateObstacles gen = map (\(x, r) -> generateObstacle x r (randomObstacleType r) obstacleImage) $ zip obstacleXPositions (randoms gen')
   where
     (numObstacles, gen') = randomR (5, 1000) gen
     obstacleWidth = 20
     obstacleXPositions = scanl (+) (800 + obstacleWidth) (take numObstacles (randomDistances gen'))
-    obstacleTypes = cycle [FloorObstacle, BelowPlayerObstacle]  -- Alternate between the obstacle types
     obstacleImage = Blank
+    randomObstacleType r
+      | r < (-0.5) = FloorObstacle
+      | r > 0.5 = FloatingObstacle
+      | otherwise = if even (floor (r * 10)) then FloorObstacle else FloatingObstacle
+
 
 randomDistances :: RandomGen g => g -> [Float]
 randomDistances gen = distances
@@ -208,9 +212,9 @@ randomDistances gen = distances
 generateObstacle :: Float -> Float -> ObstacleType -> Picture -> Obstacle
 generateObstacle x rand obstacleType image = Obstacle
   { obstacleX = x,
-    obstacleY = if obstacleType == FloorObstacle then floorY + 25 else floorY + 20 + defaultPlayerHeight - (5 + rand * 10),
+    obstacleY = if obstacleType == FloorObstacle then floorY + 13 else floorY + 40 + defaultPlayerHeight - (rand * 10),
     obstacleWidth = 20,
-    obstacleHeight = 30,
+    obstacleHeight = 40,
     obstacleType = obstacleType,  -- Set the obstacle type
     obstacleImage = image
   }
